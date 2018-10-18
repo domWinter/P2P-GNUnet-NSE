@@ -1,0 +1,119 @@
+\documentclass[IN,11pt,twoside,openright,english]{article}
+\usepackage[english]{babel}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\colorlet{punct}{red!60!black}
+\definecolor{background}{HTML}{EEEEEE}
+\definecolor{delim}{RGB}{20,105,176}
+\colorlet{numb}{magenta!60!black}
+
+\lstdefinelanguage{json}{
+    basicstyle=\normalfont\ttfamily,
+    numbers=left,
+    numberstyle=\scriptsize,
+    stepnumber=1,
+    numbersep=8pt,
+    showstringspaces=false,
+    breaklines=true,
+    frame=lines,
+    backgroundcolor=\color{background},
+    literate=
+     *{0}{{{\color{numb}0}}}{1}
+      {1}{{{\color{numb}1}}}{1}
+      {2}{{{\color{numb}2}}}{1}
+      {3}{{{\color{numb}3}}}{1}
+      {4}{{{\color{numb}4}}}{1}
+      {5}{{{\color{numb}5}}}{1}
+      {6}{{{\color{numb}6}}}{1}
+      {7}{{{\color{numb}7}}}{1}
+      {8}{{{\color{numb}8}}}{1}
+      {9}{{{\color{numb}9}}}{1}
+      {:}{{{\color{punct}{:}}}}{1}
+      {,}{{{\color{punct}{,}}}}{1}
+      {\{}{{{\color{delim}{\{}}}}{1}
+      {\}}{{{\color{delim}{\}}}}}{1}
+      {[}{{{\color{delim}{[}}}}{1}
+      {]}{{{\color{delim}{]}}}}{1},
+}
+
+
+
+\begin{document}
+
+
+\title{%
+  \Huge \textbf{Interims Report} \\
+  \vspace{1.5cm} \large \textbf{Peer-to-Peer Systems and Security} \\
+    \vspace{0.5cm} \textbf{Network Size Estimation} \vspace{1cm} }
+
+\author{%
+	\large Group 37 \\
+	\large Dominik Winter \\
+	\large Stefan Armbruster}
+\date{}
+\maketitle
+
+\newpage
+
+\section{Process Architecture}
+We decided to use the event loop library \texttt{asyncio} for the process architecture. In addition, as Python's threading library does not actually utilize multiple cores simultaneously for computation and thus will not lead to an increased performance, we decided to stick to a single threaded architecture. The combination of a single thread and the event loop library should give us the least overhead and should moreover be more secure than other methodologies.
+
+
+
+\section{Inter-Module Protocol}
+For our protocol we chose GNUnet's implementation of the network size estimation \cite{nse:1} as it has several benefits compared to other implementations. GNUnet NSE requires only $O(1)$ state per peer and sends controlled floods of $O(|E|)$ messages per round. In addition, it is more secure than other implementations by requiring Proof-of-Work-based peer identities as well as signatures attached to every protocol message. \newline
+\newline In short, all peers that use the GNUnet NSE algorithm compute a distance estimation at a frequency of \textit{f}, by comparing the own identity with a random key \textit{T} and comparisons of other peers received over the last few iterations. The first matching bits of the peer identity and the random key \textit{T} are counted and compared to the proximity calculated by other peers. The network size is then derived by computing $2^{p-0.332747}$, where p is the highest proximity of matching bits in the current round. \newline
+\newline The following section introduces the message format used in our implementation of the GNUnet NSE algorithm.
+
+
+\subsection{Message Format}
+Due to the intension to keep the communication between the different peers as simple as possible, we decided to use the Json format for the messages. The usage of the Json format enables the access to the information within the message without using bit offsets. This will help us to implement the parts of code, which read or write the respective protocol messages much more clearly and understandable.
+Furthermore, Json support can be easily added to Python by importing the respective library.\newline
+\newline Every key and its value are decribed in the following: \newline
+
+\begin{itemize}
+\item \textbf{Proximity:} Contains the amount of equal bits of the random key and the peer identity.
+\item \textbf{Round-time:} Contains the time of the corresponding round of the NSE.
+\item \textbf{Pub-key:} Contains the public-key of the peer which sends the message.
+\item \textbf{PoW:} Contains the proof of work which consists of a time stamp, a random number and a hash.
+\item \textbf{Sign:} Contains the signature, which is used to authenticate the sender.
+\end{itemize}
+
+\begin{figure}[h]
+  \centering
+  \begin{lstlisting}[language=json,firstnumber=1]
+  {
+   "Proximity": String,
+   "Round-time": String,
+   "Pub-key": String,
+   "PoW": {
+           "Time": number,
+           "Random-number": number,
+           "Hash": number
+          },
+   "Sign": String
+  }
+  \end{lstlisting}
+\caption{Message Format}
+\end{figure}
+
+\subsection{Peer Authentication}
+The authentication of the communication is proceeded by a proof of work and a signature.
+The proof of work authentication uses a hash function which calculates a value with special properties. Thereby, the sending time of the message and an arbitrary random number are used as inputs. An example of such a property may be a certain number of zero bits at the beginning. Therefore, the proof of work can be used to give a time validity of the message.
+The signature is created with the help of Python's crypto library. The module takes the message and the RSA key of the sender to sign the message. Subusequently, the signature is appended to the Json message. Thus, the signature can be used to confirm the integrity of the message and the authentication.
+
+
+\subsection{Exception Handling}
+We are handling exceptions by creating \textit{try-, except} blocks in every defined method, in oder to be able to output appropriate messages for every recieved error. This strategy will also be helpful when creating testcases with \texttt{pytest} and asserting certain exceptions.
+
+
+\begin{thebibliography}{9}
+
+\bibitem{nse:1}
+N. Evans, B. Polot, C. Grothoff, L. Kencl, L. Li, J. Widmer and H. Yin. {\em Efficient and Secure Decentralized Network Size Estimation.} In: {\em Networking 2012.} (2012), pp. 304-317. ISBN: 978-3-642-30045-5.
+
+\end{thebibliography}
+
+
+\end{document}

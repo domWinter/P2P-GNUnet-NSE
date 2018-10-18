@@ -1,0 +1,349 @@
+\documentclass[IN,11pt,oneside,openright,english]{article}
+\usepackage[english]{babel}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{dirtree}
+\usepackage{listings}
+\usepackage{booktabs}
+
+\colorlet{punct}{red!60!black}
+\definecolor{background}{HTML}{EEEEEE}
+\definecolor{delim}{RGB}{20,105,176}
+\colorlet{numb}{magenta!60!black}
+\setlength{\parindent}{0pt}
+\lstset{language=bash}
+
+\lstdefinelanguage{json}{
+    basicstyle=\normalfont\ttfamily,
+    numbers=left,
+    numberstyle=\scriptsize,
+    stepnumber=1,
+    numbersep=8pt,
+    showstringspaces=false,
+    breaklines=true,
+    frame=lines,
+    backgroundcolor=\color{background},
+    literate=
+     *{0}{{{\color{numb}0}}}{1}
+      {1}{{{\color{numb}1}}}{1}
+      {2}{{{\color{numb}2}}}{1}
+      {3}{{{\color{numb}3}}}{1}
+      {4}{{{\color{numb}4}}}{1}
+      {5}{{{\color{numb}5}}}{1}
+      {6}{{{\color{numb}6}}}{1}
+      {7}{{{\color{numb}7}}}{1}
+      {8}{{{\color{numb}8}}}{1}
+      {9}{{{\color{numb}9}}}{1}
+      {:}{{{\color{punct}{:}}}}{1}
+      {,}{{{\color{punct}{,}}}}{1}
+      {\{}{{{\color{delim}{\{}}}}{1}
+      {\}}{{{\color{delim}{\}}}}}{1}
+      {[}{{{\color{delim}{[}}}}{1}
+      {]}{{{\color{delim}{]}}}}{1},
+}
+
+
+
+\begin{document}
+
+
+\title{%
+  \Huge \textbf{Final Report} \\
+  \vspace{1.5cm} \large \textbf{Peer-to-Peer Systems and Security} \\
+    \vspace{0.5cm} \textbf{Network Size Estimation} \vspace{1cm} }
+
+\author{%
+	\large Group 37 \\
+	\large Dominik Winter \\
+	\large Stefan Armbruster}
+\date{}
+\maketitle
+
+\newpage
+
+
+\section{Program Documentation}
+
+\subsection{Program Dependencies}
+This program was developed with \textit{Python 3.6} and \textit{Ubuntu 18.04 LTS}. \newline
+The only external dependent library that is used by the program is \texttt{pycrypto}. All other libraries are standard libraries of \textit{Python 3.6}.
+\newline \newline In order to build a virtual environment with the dependent library a build script was added to the project which is further explained in section 1.2.
+\newline \newline To install any additional library please execute: \newline \texttt{pip3 install --user <library>}.
+
+
+\subsection{Program Setup}
+The project directory is set up as follows: \newline
+
+\dirtree{%
+.1 voidphone.
+.2 build.sh.
+.2 implementation.
+.3 api\_message.py.
+.3 api\_server.py.
+.3 asym\_crypto.py.
+.3 config.ini.
+.3 gossip.py.
+.3 hostkey.pem.
+.3 nse.py.
+.3 parser.py.
+.3 pow.py.
+.3 time\_delay.py.
+.3 tests.
+.4 config\_error.ini.
+.4 config.ini.
+.4 hostkey\_different.pem.
+.4 hostkey.pem.
+.4 nse\_query.py.
+.4 tests.py.
+}
+
+\newpage
+In order to run the program \textit{Python 3.6} the additional library \texttt{pycrypto} must be installed locally. \newline \newline
+In addition, a build script was written to simplify the build process which can be executed with: \texttt{source build.sh}.
+\newline The script activates a virtual python environment with the \texttt{virtualenv} library and installs the required \texttt{pycrypto} library.
+At the end of the script all unittests in \texttt{implementation/tests/tests.py} are executed.
+\newline \newline The program needs a hostkey file and a config file, which can be optionally specified via command line options. \newline
+Moreover, before executing the program a gossip module must be set up on the specified port from \texttt{config.ini}.
+\newline \newline After these steps the program can be executed with: \newline
+\texttt{python3 implementation/nse.py}
+\newline \newline To run the unittests please execute: \newline
+\texttt{python3 implementation/tests/tests.py}
+\newline \newline The usage of the program with all available command line options is shown as follows:
+
+\begin{lstlisting}[frame=single]
+Usage: nse.py [-h] [-c CONFIG] [-k HOSTKEY]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -c CONFIG, --config CONFIG
+                        Path to config file
+  -k HOSTKEY, --hostkey HOSTKEY
+                        Path to hostkey file
+
+\end{lstlisting}
+
+\subsection{Issues}
+Our program has been tested with several numbers of peers up to 100 and always produced accurate estimates within an acceptable range. However, due to memory limits, we were not able to test the program with a network greater than 100 peers.
+There are no known issues of the program so far. We added debug messages to many functions to show the program flow and a lot of exception messages have been added in order to output more specific error messages.
+
+\section{NSE Protocol}
+For our protocol we chose GNUnet's implementation of the network size estimation \cite{nse:1} as it has several benefits compared to other implementations. GNUnet NSE requires only $O(1)$ state per peer and sends controlled floods of $O(|E|)$ messages per round. In addition, it is more secure than other implementations by requiring Proof-of-Work-based peer identities as well as signatures attached to every protocol message. \newline
+\newline In short, all peers that use the GNUnet NSE algorithm compute a distance estimation at a frequency of \textit{f}, by comparing the own identity with a random key \textit{T} and comparisons of other peers received over the last few iterations. The first matching bits of the peer identity and the random key \textit{T} are counted and compared to the proximity calculated by other peers. The network size is then derived by computing $2^{p-0.332747}$, where p is the highest proximity of matching bits in the current round. \newline
+\newline The message format used in our implementation of the GNUnet NSE algorithm is explained in the following:
+
+\begin{figure}[!h]
+  \centering
+  \begin{lstlisting}[language=json,firstnumber=1]
+  {
+   "Hop-Count": Number,
+   "Round": String,
+   "Proximity": Number,
+   "Pub-key": String,
+   "PoW": {
+           "Time": String,
+           "Random-number": Number,
+           "Hash": String
+          },
+   "Sign": String
+  }
+  \end{lstlisting}
+\caption{Message Format}
+\end{figure}
+
+\newpage 
+
+\begin{itemize}
+\item \textbf{Hop-Count:} Contains information about the number of peers that forwarded the message.
+\item \textbf{Round:} Contains the time of the corresponding round of the NSE.
+\item \textbf{Proximity:} Contains the amount of equal bits of the random key and the peer identity.
+\item \textbf{Pub-key:} Contains the public-key of the peer which sends the message.
+\item \textbf{PoW:} Contains the proof of work which consists of a time stamp, a random number and a hash.
+\item \textbf{Sign:} Contains the signature, which is used to authenticate the sender.
+\end{itemize}
+
+
+
+We had to add the \textit{Hop-Count} field during our developing, as we needed it to calculate an accurate process delay.
+This was the only change we made compared to our message format in the interims report.
+
+\section{Future Work}
+As described in the interims report, we used the GNUnet's implementation of the network size estimation \cite{nse:1}. In order to create a usable program, the main elements of the paper were implemented. \newline
+These include the generation of random keys and their respective proximities for the individual peers, the calculation of a peer estimate, the delay for broadcasting own messages, the delay for forwarding received messages as well as the proof of work approach. Therefore, our NSE-module is already usable. \newline
+However, in order to receive better results there are still further approaches that can be implemented.
+
+\subsection{Exchange of the History}
+If a peer joins the network, it lacks information about the previous rounds. Hence, it would be beneficial if an adjacent peer sent its history to the new joining peer. \newline
+Our approach includes that new joining peers would first send a message containing a request of the message history to their neighbours. Subsequently, the neighbours would answer by sending their history to the new peer. As a last step of the bootstrapping process the new peer would use the received history as its own and would be able to calculate useful delays and standard deviations. \newline
+The request for history messages and their answer messages would need own identification numbers. Possible numbers would be 531 for the history request message type and 532 for the history answer message type. The answer message would additionally use the public-key of the request message to address the respective peer which requested the history.
+\newline
+
+
+History Request:
+\begin{figure}[!h]
+  \centering
+  \begin{lstlisting}[language=json,firstnumber=1]
+  {
+   "Pub-key": String,
+   "PoW": {
+           "Time": String,
+           "Random-number": Number,
+           "Hash": String
+          },
+   "Sign": String
+  }
+  \end{lstlisting}
+\caption{History Message Request}
+\end{figure}
+
+
+\begin{itemize}
+\item \textbf{Pub-key:} Contains the public-key of the peer which sends the message.
+\item \textbf{PoW:} Contains the proof of work which consists of a time stamp, a random number and a hash.
+\item \textbf{Sign:} Contains the signature, which is used to authenticate the sender.
+\end{itemize}
+
+\newpage
+
+History Answer:
+\begin{figure}[!h]
+  \centering
+  \begin{lstlisting}[language=json,firstnumber=1]
+  {
+   "Peer-key": String,
+   "AmountOfMessages": Number,
+   "History": String,
+   "Pub-key": String,
+   "PoW": {
+           "Time": String,
+           "Random-number": Number,
+           "Hash": String
+          },
+   "Sign": String
+  }
+  \end{lstlisting}
+\caption{History Message Answer}
+\end{figure}
+
+\begin{itemize}
+\item \textbf{Peer-key:} Contains the public-key of the peer which sent the request and receives the answer.
+\item \textbf{AmountOfMessages:} Contains the amount of messages in the history.
+\item \textbf{History:} Contains a string represenation of the history.
+\item \textbf{Pub-key:} Contains the public-key of the peer which sends the message.
+\item \textbf{PoW:} Contains the proof of work which consists of a time stamp, a random number and a hash.
+\item \textbf{Sign:} Contains the signature, which is used to authenticate the sender.
+\end{itemize}
+
+\subsection{Handle Messages with Wrong Time}
+An additional problem might be time differences between peers. Our current approach handles messages with a wrong round time in dependence to the magnitude of the time difference. If the message is from more than one round before or after, the message is ignored. If the message is from the next round, it is saved for that round, whereas if it is from the previous round, it is compared with the history message from the corresponding round. Thereby, the history message is updated if the received message has the better proximity. \newline
+A further problem are small time differences within a round, as it leads to wrong timed announcements.
+For that purpose, a time message would be helpful as the time could be adjusted to other peers in the network.
+
+If a peer receives a message with a wrong time, a wrong-time-message might be sent. A possible identification number would be 533.
+\newline
+
+
+Wrong-Time-Message:
+
+\begin{figure}[!h]
+  \centering
+  \begin{lstlisting}[language=json,firstnumber=1]
+  {
+   "Peer-key": String,
+   "Current-time": String,
+   "Receiving-time": String
+   "Wrong-peer-time": String,
+   "Pub-key": String,
+   "PoW": {
+           "Time": String,
+           "Random-number": Number,
+           "Hash": String
+          },
+   "Sign": String
+  }
+  \end{lstlisting}
+\caption{Wrong-time-message}
+\end{figure}
+
+\begin{itemize}
+\item \textbf{Peer-key:} Contains the public-key of the peer which sent a message with the wrong time.
+\item \textbf{Current-time:} Contains the current time of the own peer.
+\item \textbf{Time-delta:} Contains the time difference of the received and the own time. 
+\item \textbf{Wrong-peer-time:} Contains the received wrong time of the other peer.
+\item \textbf{Pub-key:} Contains the public-key of the peer which sends the message.
+\item \textbf{PoW:} Contains the proof of work which consists of a time stamp, a random number and a hash.
+\item \textbf{Sign:} Contains the signature, which is used to authenticate the sender.
+\end{itemize}
+
+If a peer with a wrong time received such a message, it would wait for messages from other peers with a similar content. In order to avoid an attack, it is necessary to wait for more than one wrong-time-message. If the current-times of the other messages were almost equal, than the own time would be adjusted.\newline
+Thereby, a timedelta balancing out the time differences could be created. For that purpose, the minimum of the time-deltas from the wrong-time-messages could be used. This time-delta would correct the wrong time of the peer, resulting in less messages, as the time-delta and the delay would inhibit messages with small proximities to broadcast too early. 
+
+\newpage
+
+\section{Work Distribution}
+
+\subsection{Individual Effort}
+
+\begin{table}[htb]
+\centering
+\begin{tabular}{p{6.5cm}p{2cm}p{2cm}}
+\toprule
+\textbf{Description} & \textbf{Dominik (hours)} & \textbf{Stefan (hours)} \\
+\midrule
+Read and understand GNUnet's NSE protocol & 10 & 10 \\
+\midrule
+Implement \textit{config.ini} parser module & 4 & 0 \\
+\midrule
+Understand and implement asyncio architecture & 15 & 5 \\
+\midrule
+Understand and implement necessary asymmetric crypto module & 12 & 10 \\
+\midrule
+Understand and implement gossip message handling (asyncio loops) & 20 & 20 \\
+\midrule
+Understand and implement api server and query handling & 10 & 2 \\
+\midrule
+Understand and implement proof of work module & 8 & 6 \\
+\midrule
+Understand and implement nse handler module (validation and updating of messages) & 22 & 20 \\
+\midrule
+Understand and implement time delay module & 0 & 12 \\
+\midrule
+Implement unittests & 10 & 8 \\
+\midrule
+Refactoring of codebase & 12 & 5 \\
+\midrule
+Testing and debugging in gossip-testing branch & 25 & 25 \\
+\bottomrule
+\end{tabular}
+\caption{Individual Effort}
+\end{table}
+
+\newpage 
+
+\subsection{Team Effort}
+
+\begin{table}[htb]
+\centering
+\begin{tabular}{lr}
+\toprule
+\textbf{Description} & \textbf{Effort in hours} \\
+\midrule
+Initial Report & 3 \\
+\midrule
+Interims Report & 4 \\
+\midrule
+Final Report & 8 \\
+\bottomrule
+\end{tabular}
+\caption{Team Effort}
+\end{table}
+
+
+\begin{thebibliography}{9}
+
+\bibitem{nse:1}
+N. Evans, B. Polot, C. Grothoff, L. Kencl, L. Li, J. Widmer and H. Yin. {\em Efficient and Secure Decentralized Network Size Estimation.} In: {\em Networking 2012.} (2012), pp. 304-317. ISBN: 978-3-642-30045-5.
+
+\end{thebibliography}
+
+
+\end{document}
