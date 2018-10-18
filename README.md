@@ -1,4 +1,4 @@
-## Peer-to-Peer - Group 37 - Network Size Estimation
+## Peer-to-Peer - Network Size Estimation
 
 This repository contains all development files for the network size estimation project.
 
